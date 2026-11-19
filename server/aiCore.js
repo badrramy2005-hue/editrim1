@@ -1,12 +1,12 @@
 /**
  * Shared AI core for both the Vercel function (`api/ai.js`) and the Vite dev
- * middleware. The API key never reaches the browser.
+ * middleware. Browser BYOK credentials are request-scoped and never persisted server-side.
  */
 
 import { jsonrepair } from 'jsonrepair';
 
 export const AI_MODEL = 'minimax/minimax-m3.1-flash';
-const GATEWAY_URL = 'https://ai-gateway.vercel.sh/v1/chat/completions';
+const DEFAULT_GATEWAY_URL = 'https://ai-gateway.vercel.sh/v1';
 
 export const AI_FONTS = [
   'Inter', 'Bricolage Grotesque', 'Instrument Serif', 'Playfair Display',
@@ -39,7 +39,7 @@ export function aiHealth(apiKey) {
     configured: Boolean(apiKey),
     message: apiKey
       ? 'AI service configured.'
-      : 'The AI server key is missing on the server.',
+      : 'No server-side AI provider is configured. Add your own provider key in AI Provider Settings.',
   };
 }
 
@@ -66,6 +66,20 @@ function checkRateLimit(ip) {
 
 const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
 const str = (v, max = 2000) => (typeof v === 'string' ? v.slice(0, max).trim() : '');
+
+function normalizeBaseURL(value) {
+  const raw = str(value, 500);
+  let parsed;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    throw new AiError('Enter a valid AI provider Base URL in AI Provider Settings.', 400, 'config', 'INVALID_BASE_URL');
+  }
+  if (!['https:', 'http:'].includes(parsed.protocol) || parsed.username || parsed.password || parsed.search || parsed.hash) {
+    throw new AiError('The AI provider Base URL must be an HTTP(S) URL without credentials or query parameters.', 400, 'config', 'INVALID_BASE_URL');
+  }
+  return parsed.toString().replace(/\/+$/, '');
+}
 const hex = v => typeof v === 'string' && /^(#[0-9a-f]{3,8}|rgba?\([^)]*\)|transparent)$/i.test(v.trim());
 
 function stripFences(text) {
@@ -102,12 +116,14 @@ function cleanCopy(text) {
 async function callModel(messages, opts = {}) {
   const apiKey = opts.apiKey;
   if (!apiKey) {
-    throw new AiError('AI is not configured on this deployment yet. Add the server key.', 503, 'config', 'MISSING_API_KEY');
+    throw new AiError('Add an API key in AI Provider Settings to use AI features.', 503, 'config', 'MISSING_API_KEY');
   }
+  const baseURL = normalizeBaseURL(opts.baseURL || process.env.AI_GATEWAY_BASE_URL || DEFAULT_GATEWAY_URL);
+  const endpoint = `${baseURL}/chat/completions`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 58_000);
   try {
-    const res = await fetch(GATEWAY_URL, {
+    const res = await fetch(endpoint, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -115,7 +131,7 @@ async function callModel(messages, opts = {}) {
       },
       signal: controller.signal,
       body: JSON.stringify({
-        model: AI_MODEL,
+        model: opts.model || AI_MODEL,
         messages,
         temperature: opts.temperature ?? 0.75,
         max_tokens: opts.maxTokens ?? 1500,
@@ -367,10 +383,15 @@ export async function runAi(payload, options = {}) {
   try {
     if (!payload || typeof payload !== 'object') throw new AiError('Invalid request.', 400, 'request', 'INVALID_REQUEST');
     checkRateLimit(options.ip);
+    const providerOptions = {
+      apiKey: options.apiKey || process.env.AI_GATEWAY_API_KEY,
+      baseURL: options.baseURL || process.env.AI_GATEWAY_BASE_URL,
+      model: options.model || process.env.AI_MODEL,
+    };
 
     if (action === 'write') {
       const result = await callModel(writePrompt(payload), {
-        apiKey: options.apiKey,
+        ...providerOptions,
         maxTokens: 700,
         temperature: 0.82,
       });
@@ -383,7 +404,7 @@ export async function runAi(payload, options = {}) {
     if (action === 'translate') {
       if (!str(payload.text)) throw new AiError('Select some text to translate.', 400, 'validation', 'MISSING_TEXT');
       const result = await callModel(translatePrompt(payload), {
-        apiKey: options.apiKey,
+        ...providerOptions,
         maxTokens: 900,
         temperature: 0.3,
       });
@@ -395,7 +416,7 @@ export async function runAi(payload, options = {}) {
 
     if (action === 'design') {
       const result = await callModel(designPrompt(payload), {
-        apiKey: options.apiKey,
+        ...providerOptions,
         maxTokens: 7000,
         temperature: 0.7,
         responseFormat: { type: 'json_object' },
@@ -411,7 +432,7 @@ export async function runAi(payload, options = {}) {
     if (action === 'illustration') {
       if (!str(payload.prompt)) throw new AiError('Describe the illustration first.', 400, 'validation', 'MISSING_PROMPT');
       const result = await callModel(illustrationPrompt(payload), {
-        apiKey: options.apiKey,
+        ...providerOptions,
         maxTokens: 5000,
         temperature: 0.8,
       });
@@ -422,7 +443,7 @@ export async function runAi(payload, options = {}) {
 
     if (action === 'critique') {
       const result = await callModel(critiquePrompt(payload), {
-        apiKey: options.apiKey,
+        ...providerOptions,
         maxTokens: 2500,
         temperature: 0.4,
         responseFormat: { type: 'json_object' },
@@ -435,7 +456,7 @@ export async function runAi(payload, options = {}) {
     if (action === 'edit') {
       if (!str(payload.instruction)) throw new AiError('Describe the change you want first.', 400, 'validation', 'MISSING_INSTRUCTION');
       const result = await callModel(editPrompt(payload), {
-        apiKey: options.apiKey,
+        ...providerOptions,
         maxTokens: 3500,
         temperature: 0.35,
         responseFormat: { type: 'json_object' },

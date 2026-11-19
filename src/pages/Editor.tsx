@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   ArrowLeft, Check, ChevronLeft, ChevronRight, Cloud, Copy, Download, HelpCircle,
   ImageUp, LayoutTemplate, Loader2, Maximize2, MessageSquare, Palette, PaintBucket, Play, Plus,
-  Redo2, Share2, Shapes, SlidersHorizontal, Sparkles, Trash2, Type, Undo2, X,
+  Redo2, Settings2, Share2, Shapes, SlidersHorizontal, Sparkles, Trash2, Type, Undo2, X,
 } from 'lucide-react';
 import { Logo } from '../components/Brand';
 import { EditrimIcon, type EditrimIconName } from '../components/EditrimIcon';
@@ -16,6 +16,7 @@ import { HistoryDrawer } from '../components/HistoryDrawer';
 import { BulkCreateModal } from '../components/BulkCreateModal';
 import { CommandBar } from '../components/CommandBar';
 import { InlineAiBar } from '../components/InlineAiBar';
+import { AiProviderSettingsModal } from '../components/AiProviderSettingsModal';
 import { useToast } from '../components/Toast';
 import { useSurface } from '../hooks/useSurface';
 import { Canvas } from '../editor/Canvas';
@@ -155,6 +156,7 @@ function EditorWorkspace({ initial }: { initial: Design }) {
   const [bulkOpen, setBulkOpen] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [aiProviderOpen, setAiProviderOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'error'>('saved');
   const [focusMode, setFocusMode] = useState(false);
@@ -798,6 +800,9 @@ function EditorWorkspace({ initial }: { initial: Design }) {
           <button className="ed-ico ed-insp-toggle" onClick={() => setInspectorOpen(v => !v)} title="Design controls">
             <EditrimIcon name="sliders" size={17} />
           </button>
+          <button className="ed-ico" onClick={() => setAiProviderOpen(true)} title="AI Provider Settings" aria-label="AI Provider Settings">
+            <Settings2 size={17} />
+          </button>
           <button className="ed-ico" onClick={() => setCommandOpen(true)} title="Quick actions (Ctrl K)">
             <EditrimIcon name="search" size={17} />
           </button>
@@ -844,6 +849,7 @@ function EditorWorkspace({ initial }: { initial: Design }) {
             aiFocus={aiFocus}
             onClose={() => setPanel(null)}
             onOpenBrand={() => setBrandOpen(true)}
+            onOpenAiSettings={() => setAiProviderOpen(true)}
           />
         )}
 
@@ -922,6 +928,11 @@ function EditorWorkspace({ initial }: { initial: Design }) {
       <ShareModal open={shareOpen} onClose={() => setShareOpen(false)} design={design} />
       <ResizeModal open={resizeOpen} onClose={() => setResizeOpen(false)} design={design} onResize={(w, h) => { store.resizeDesign(w, h); setPanel(null); toast('Canvas resized — content scaled to fit'); }} />
       <ShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+      <AiProviderSettingsModal
+        open={aiProviderOpen}
+        onClose={() => setAiProviderOpen(false)}
+        onSaved={() => { window.dispatchEvent(new Event('editrim:ai-settings-updated')); }}
+      />
       <ResizeStudio
         open={resizeStudioOpen}
         onClose={() => setResizeStudioOpen(false)}

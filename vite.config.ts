@@ -26,7 +26,9 @@ function readJsonBody(req) {
   });
 }
 
-function aiDevPlugin(apiKey) {
+type AiProviderSettings = { apiKey?: string; baseURL?: string; model?: string };
+
+function aiDevPlugin(serverSettings: AiProviderSettings) {
   return {
     name: 'editrim-ai-dev',
     configureServer(server) {
@@ -35,7 +37,7 @@ function aiDevPlugin(apiKey) {
         res.setHeader('Cache-Control', 'no-store');
         if (req.method === 'GET') {
           res.statusCode = 200;
-          res.end(JSON.stringify(aiHealth(Boolean(apiKey))));
+          res.end(JSON.stringify(aiHealth(Boolean(serverSettings.apiKey))));
           return;
         }
         if (req.method !== 'POST') {
@@ -46,7 +48,9 @@ function aiDevPlugin(apiKey) {
         try {
           const payload = await readJsonBody(req);
           const result = await runAi(payload, {
-            apiKey,
+            apiKey: String(req.headers['x-ai-api-key'] ?? '').trim() || serverSettings.apiKey,
+            baseURL: String(req.headers['x-ai-base-url'] ?? '').trim() || serverSettings.baseURL,
+            model: String(req.headers['x-ai-model'] ?? '').trim() || serverSettings.model,
             ip: req.socket.remoteAddress,
           });
           res.statusCode = result.status;
@@ -69,8 +73,13 @@ function aiDevPlugin(apiKey) {
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
+  const serverSettings = {
+    apiKey: env.AI_GATEWAY_API_KEY,
+    baseURL: env.AI_GATEWAY_BASE_URL,
+    model: env.AI_MODEL,
+  };
   return {
-    plugins: [react(), aiDevPlugin(env.AI_GATEWAY_API_KEY)],
+    plugins: [react(), aiDevPlugin(serverSettings)],
     server: { port: 5173 },
     build: { chunkSizeWarningLimit: 1600 },
   };

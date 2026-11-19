@@ -237,6 +237,17 @@
   display: none;
 }
 
+.ai-provider-fields { display: grid; gap: 14px; padding: 4px 2px 0; }
+.ai-provider-modal .modal-body { padding: 18px 22px; }
+.ai-provider-privacy { display: flex; align-items: flex-start; gap: 8px; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.ai-provider-privacy svg { flex: none; margin-top: 1px; color: var(--cobalt); }
+.ai-provider-message { display: flex; align-items: center; gap: 6px; margin: 0; color: #a53b2f; font-size: 11px; line-height: 1.45; }
+.ai-provider-message.is-ok { color: #3e6c31; }
+.ai-provider-remove { justify-self: start; display: inline-flex; align-items: center; gap: 6px; padding: 5px 0; color: var(--muted); font-size: 11px; }
+.ai-provider-remove:hover { color: #a53b2f; }
+.ai-settings-link { margin-left: auto; flex: none; color: var(--cobalt); font-size: 11px; font-weight: 600; }
+.ai-settings-link:hover { text-decoration: underline; }
+
 /* ---------------- body / rail ---------------- */
 .ed-body {
   flex: 1;

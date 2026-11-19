@@ -8,6 +8,7 @@ import {
   AI_LANGUAGES, AI_STYLES, AI_TONES, AiRequestError, callAi,
   checkAiHealth, summarizePage, summarizePageForEdit, type AiHealth,
 } from '../lib/ai';
+import { hasAiProviderKey } from '../lib/aiProvider';
 import { normalizeAiDesign, sanitizeAiSvg, svgToDataUrl } from '../lib/aiDesign';
 import { applyEditPlan, normalizeEditPlan, summarizePlan, type EditPlan } from '../lib/aiCommands';
 import { createImage, createText } from './factory';
@@ -56,15 +57,11 @@ async function renderPageSnapshot(store: EditorStore): Promise<string | undefine
 }
 
 function errorHint(err: AiRequestError): string | null {
-  if (err.code === 'MISSING_API_KEY') {
-    return 'The AI service is missing its server key. Add the key in your deployment environment and redeploy. For local dev, add it to .env.local and restart Vite.';
-  }
+  if (err.code === 'MISSING_API_KEY') return null;
   if (err.code === 'ENDPOINT_UNREACHABLE') {
-    return 'The browser could not reach /api/ai. Make sure the AI endpoint is deployed, or restart the local dev server.';
+    return 'The browser could not reach /api/ai. Check your network or deployment and try again.';
   }
-  if (err.code === 'GATEWAY_401' || err.code === 'GATEWAY_403') {
-    return 'The AI service rejected the server key. Check the deployment key and its access.';
-  }
+  if (err.code === 'GATEWAY_401' || err.code === 'GATEWAY_403') return 'The provider rejected this API key. Check the key in AI Provider Settings.';
   if (err.code === 'GATEWAY_402' || err.code === 'GATEWAY_429' || err.stage === 'rate_limit') {
     return 'The AI service is rate-limited or out of budget. Wait a moment and try again.';
   }
@@ -84,16 +81,19 @@ export function AiPanel({
   focusRequest,
   onClose,
   onOpenBrand,
+  onOpenAiSettings,
 }: {
   store: EditorStore;
   brand: BrandKit;
   focusRequest?: { focus: 'write' | 'translate'; nonce: number } | null;
   onClose: () => void;
   onOpenBrand: () => void;
+  onOpenAiSettings: () => void;
 }) {
   const { toast } = useToast();
   const [mode, setMode] = useState<Mode>('design');
   const [health, setHealth] = useState<AiHealth | null | undefined>(undefined);
+  const [hasBrowserKey, setHasBrowserKey] = useState(() => hasAiProviderKey());
 
   const [designPrompt, setDesignPrompt] = useState('');
   const [style, setStyle] = useState('Editorial');
@@ -187,8 +187,13 @@ export function AiPanel({
 
   useEffect(() => {
     let alive = true;
-    checkAiHealth().then(h => { if (alive) setHealth(h); });
-    return () => { alive = false; };
+    const refresh = () => {
+      setHasBrowserKey(hasAiProviderKey());
+      checkAiHealth().then(h => { if (alive) setHealth(h); });
+    };
+    refresh();
+    window.addEventListener('editrim:ai-settings-updated', refresh);
+    return () => { alive = false; window.removeEventListener('editrim:ai-settings-updated', refresh); };
   }, []);
 
   const healthReady = health?.configured === true;
@@ -475,12 +480,13 @@ export function AiPanel({
         <span className="ai-health-dot" />
         <div>
           <strong>
-            {health === undefined ? 'Checking AI…' : healthReady ? 'AI ready' : health === null ? 'AI endpoint unreachable' : 'AI key missing'}
+            {health === undefined ? 'Checking AI…' : healthReady ? (hasBrowserKey ? 'Your provider is ready' : 'Server provider is ready') : health === null ? 'AI endpoint unreachable' : 'Add a provider key'}
           </strong>
           {!healthReady && (
             <span>{health?.message ?? 'Testing /api/ai…'}</span>
           )}
         </div>
+        {!hasBrowserKey && !healthReady && <button className="ai-settings-link" onClick={onOpenAiSettings}>Set up</button>}
         {healthBroken && (
           <button
             onClick={() => { setHealth(undefined); checkAiHealth().then(setHealth); }}
@@ -494,7 +500,7 @@ export function AiPanel({
       {health === null && (
         <div className="ai-config-note">
           <EditrimIcon name="info" size={14} />
-          <span>If you are running locally, restart the dev server after adding the AI key. On the deployment, check the function.</span>
+          <span>Check your network and AI endpoint, or add a provider key in AI Provider Settings.</span>
         </div>
       )}
 

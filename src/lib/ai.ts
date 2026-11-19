@@ -1,4 +1,5 @@
 import type { Design, Page } from './types';
+import { readAiProviderSettings } from './aiProvider';
 
 export type AiStage =
   | 'request'
@@ -54,6 +55,9 @@ export async function checkAiHealth(): Promise<AiHealth | null> {
     const res = await fetch('/api/ai', { method: 'GET', headers: { Accept: 'application/json' } });
     if (!res.ok) return null;
     const data = await res.json();
+    if (readAiProviderSettings().apiKey.trim()) {
+      return { ...(data as AiHealth), configured: true, message: 'Using your browser’s AI provider settings.' };
+    }
     return data as AiHealth;
   } catch {
     return null;
@@ -61,12 +65,19 @@ export async function checkAiHealth(): Promise<AiHealth | null> {
 }
 
 export async function callAi<T>(action: string, payload: Record<string, unknown>): Promise<T> {
+  const provider = readAiProviderSettings();
+  const headers: Record<string, string> = { 'Content-Type': 'application/json', Accept: 'application/json' };
+  if (provider.apiKey.trim()) {
+    headers['X-AI-API-Key'] = provider.apiKey.trim();
+    headers['X-AI-Base-URL'] = provider.baseURL.trim();
+    headers['X-AI-Model'] = provider.model.trim();
+  }
   const controller = new AbortController();
   const timer = window.setTimeout(() => controller.abort(), 75_000);
   try {
     const res = await fetch('/api/ai', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      headers,
       body: JSON.stringify({ ...payload, action }),
       signal: controller.signal,
     });
@@ -113,7 +124,7 @@ export async function callAi<T>(action: string, payload: Record<string, unknown>
     }
     const netErr = new AiRequestError({
       message:
-        "Couldn't reach the AI endpoint. Check your connection — and if you're running locally, make sure the dev server has the AI key in .env.local.",
+        "Couldn't reach the AI endpoint. Check your connection and provider Base URL, then try again.",
       stage: 'network',
       code: 'ENDPOINT_UNREACHABLE',
       action,

@@ -54,6 +54,7 @@ export function LeftPanel({
   aiFocus,
   onClose,
   onOpenBrand,
+  onOpenAiSettings,
 }: {
   tab: PanelTab;
   store: EditorStore;
@@ -61,6 +62,7 @@ export function LeftPanel({
   aiFocus?: { focus: 'write' | 'translate'; nonce: number } | null;
   onClose: () => void;
   onOpenBrand: () => void;
+  onOpenAiSettings: () => void;
 }) {
   const { toast } = useToast();
   const page = store.page;
@@ -123,7 +125,7 @@ export function LeftPanel({
   };
 
   if (tab === 'ai') {
-    return <AiPanel store={store} brand={brand} focusRequest={aiFocus} onClose={onClose} onOpenBrand={onOpenBrand} />;
+    return <AiPanel store={store} brand={brand} focusRequest={aiFocus} onClose={onClose} onOpenBrand={onOpenBrand} onOpenAiSettings={onOpenAiSettings} />;
   }
 
   if (tab === 'templates') {
